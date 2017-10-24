@@ -1,19 +1,24 @@
 from sklearn.neural_network import MLPClassifier
-import numpy as np
 import pandas
+import argparse
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import ShuffleSplit
-from sklearn.model_selection import cross_val_score
-
+import matplotlib.pyplot as plt
 
 def leer_database():
+	"""
+	Encargada de realizar la lectura de los archivos csv, uniendo de este 
+	modo los indivuos perteneceientes a todos los tramos de fonasa con los
+	que no pertencen, procediendo a realizar su preprocesamiento para poder
+	con las variables categoricas
+	:return: un dataframe con todos los datos preprocesados
+	"""
 	data = pandas.read_csv('./NO_C_2017.csv')
 	data1 = pandas.read_csv('./A.csv')
 	data2 = pandas.read_csv('./B.csv')
 	data3 = pandas.read_csv('./C.csv')
 	data4 = pandas.read_csv('./D.csv')
 
-	#unir 
+	#unir
 	datos = pandas.concat([data, data1, data2, data3, data4])
 
 	#mesclar los datos
@@ -32,7 +37,6 @@ def leer_database():
 
 	datos.loc[((datos["est_civil"] == " ") & (datos["cant_hijos_fam"] == 0)), "est_civil"] = "SOLTERO"
 	datos.loc[((datos["est_civil"] == " ") & (datos["cant_hijos_fam"] > 0)), "est_civil"] = "CASADO"
-
 	#son pasados los estados a una variable binaria
 	datos.loc[datos["status_salud_publica"] == "S", "status_salud_publica"]= 1
 	datos.loc[datos["status_salud_publica"] == "N", "status_salud_publica"]= 0
@@ -64,87 +68,60 @@ def leer_database():
 
 	#se indica que son columnas enteras
 	for name in selectOpt:
-	    #print(name)
-	    datos[name] = datos[name].astype('int')
+		#print(name)
+		datos[name] = datos[name].astype('int')
  
 	return datos
 
-def validacion_cruzada(data, neu, cil, activation_o, solver_o):
-    
-    #cv = cross_validation.KFold(len(data), n_folds=10)
-    X, x_test, Y, y_test = train_test_split(data.loc[:, "est_civil":], data['status_salud_publica'], test_size=0.3)
 
-    vp = 0
-    vn = 0
-    fp = 0
-    fn = 0
-        
-    X = pandas.DataFrame.as_matrix(X)
-    x_test = pandas.DataFrame.as_matrix(x_test)
+def validacion_cruzada(data, neuronas, ciclos, activacion, optimizacion, grafico):
 
-    y = np.array(Y).astype(int)
-
-    y_test = np.array(y_test).astype(int)
-
-    if(activation_o == 0):
-    	activ = 'relu'
-    elif(activation_o == 1):
-    	activ = 'tanh'
-
-    if(solver_o == 0):
-    	solv = 'adam'
-    elif(solver_o == 1):
-    	solv = 'sgd'
-
-    ##print("una MLP con %i neuronas, funcion activacion: %s , metodo minimizar: %s, numero de iteraciones: %i"%(neu,activ,solv,cil))
-	
-	clf = MLPClassifier(solver=solv, activation = activ, alpha=1e-5, hidden_layer_sizes=(neu, ), random_state=1)
-	#cv = ShuffleSplit(n_splits=2, test_size=0.3, random_state=0)
-	scores = cross_val_score(clf, data.loc[:, "est_civil":], data['status_salud_publica'], cv=3)
-	print scores
-	#clf.fit(X,y)
-	
-	#solucion = clf.predict(x_test)
 	"""
-    p = pandas.crosstab(y_test, solucion, rownames=['Clase real'], colnames=['Prediccion clase'])
-    
-    try:
-        vp += p[0][0]
-        fn += p[0][1]
-        fp += p[1][0]
-        vn += p[1][1]
-    except:
-        vp += p[0][0]
-        fp += 0
-        fn += p[0][1]
-        vn += 0
-    """
-    #son mostrados los resultados
-    print "Exactitud: ",(vp+vn)/float(vp+vn+fp+fn+1)
-    print "%i | %i"%(vp,fp)
-    print "%i | %i"%(fn,vn)
+	Genera el modelo de MLP y procede a realizar el entrenamiento
+	y posterior test del modelo
+	:param data: dataframe con datos
+	:param neuronas: cantidad de neuronas capa oculta
+	:param ciclos: numero de ciclos de MLP
+	:param activacion: Escoger funcion de activacion. 0: relu, 1: tanh
+	:param optimizacion: Escoger funcion de optimizacion de pesos. 0: lbfgs, 1: sgd
+	:param grafico: Desea realizar el grafico del error. 0: no, 1: si
+	:return: 
+	"""
+	if (activacion == 0):
+		activacion = 'relu'
+	elif (activacion == 1):
+		activacion = 'tanh'
 
-    return (vp+vn)/float(vp+vn+fp+fn+1)
+	if (optimizacion == 0):
+		optimizacion = 'lbfgs'
+	elif (optimizacion == 1):
+		optimizacion = 'sgd'
 
+	print("Una MLP con %i neuronas, funcion activacion: %s , metodo optimizacion pesos: %s, numero de iteraciones: %i"%(neuronas,activacion,optimizacion,ciclos))
+	clf = MLPClassifier(solver=optimizacion, activation=activacion, alpha=1e-5, hidden_layer_sizes=(neuronas,), random_state=1, max_iter=ciclos)
+	x_train, x_test, y_train, y_test = train_test_split(data.loc[:, "est_civil":], data['status_salud_publica'], test_size=0.3)
+	clf.fit(x_train, y_train)
+	score = clf.score(x_test, y_test)
+	print("Accuracy: %.2f "%(score*100))
+	print("Loss: %.2f "%(clf.loss_ * 100))
+	if(grafico == 1):
+
+		#graficar
+		plt.plot(clf.loss_curve_)
+		plt.title("MLP con %i neuronas, accuracy: %.2f"%(neuronas, score * 100))
+		plt.ylabel("Error")
+		plt.xlabel("Iteraciones")
+		plt.show()
+
+parser = argparse.ArgumentParser(description='Ejecucion del dataSet BigData con MLP')
+parser.add_argument('-n','--neuronas', help='Numero de neuronas en la capa oculta',required=True, type=int)
+parser.add_argument('-c','--ciclos',help='Numero de epocas de la MLP', required=True, type=int)
+parser.add_argument('-a','--activacion', help='Escoger funcion de activacion. 0: relu, 1: tanh',required=True, type=int)
+parser.add_argument('-s','--optimizacion',help='Escoger funcion de optimizacion de pesos. 0: lbfgs, 1: sgd', required=True, type=int)
+parser.add_argument('-g','--grafico',help='Indica si se desea el grafico de error. 0: no, 1: si', required=True, type=int)
+
+args = parser.parse_args()
 
 data = leer_database()
+validacion_cruzada(data, args.neuronas , args.ciclos , args.activacion , args.optimizacion, args.grafico)
 
-df = pandas.DataFrame(columns=['neuronas','ciclos','n','e','exactitud'],dtype=float)
-
-
-cil = 300 #numero de ciclos
-df = df.append({'neuronas':10,'ciclos':cil,'n': 0,'e': 1,'exactitud':validacion_cruzada(data, 10, cil, 1, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':20,'ciclos':cil,'n': 0,'e': 0,'exactitud':validacion_cruzada(data, 20, cil, 0, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':30,'ciclos':cil,'n': 1,'e': 0,'exactitud':validacion_cruzada(data, 30, cil, 1, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':40,'ciclos':cil,'n': 0,'e': 1,'exactitud':validacion_cruzada(data, 40, cil, 0, 1)  }, ignore_index=True)
-#df = df.append({'neuronas':50,'ciclos':cil,'n': 1,'e': 1,'exactitud':validacion_cruzada(data, 50, cil, 1, 1)  }, ignore_index=True)
-#df = df.append({'neuronas':60,'ciclos':cil,'n': 1,'e': 0,'exactitud':validacion_cruzada(data, 60, cil, 1, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':70,'ciclos':cil,'n': 1,'e': 0,'exactitud':validacion_cruzada(data, 70, cil, 1, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':80,'ciclos':cil,'n': 1,'e': 0,'exactitud':validacion_cruzada(data, 80, cil, 1, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':90,'ciclos':cil,'n': 1,'e': 1,'exactitud':validacion_cruzada(data, 90, cil, 1, 1)  }, ignore_index=True)
-#df = df.append({'neuronas':150,'ciclos':cil,'n': 0,'e': 0,'exactitud':validacion_cruzada(data, 150, cil, 0, 0)  }, ignore_index=True)
-#df = df.append({'neuronas':110,'ciclos':cil,'n': 0,'e': 1,'exactitud':validacion_cruzada(data, 110, cil, 0, 1)  }, ignore_index=True)
-#df = df.append({'neuronas':220,'ciclos':cil,'n': 1,'e': 1,'exactitud':validacion_cruzada(data, 220, cil, 1, 1)  }, ignore_index=True)
-#df = df.append({'neuronas':200,'ciclos':cil,'n': 0,'e': 1,'exactitud':validacion_cruzada(data, 200, cil, 0, 1)  }, ignore_index=True)
-
-print df
